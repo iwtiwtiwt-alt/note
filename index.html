@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>靈感便利貼看板 Sticky Notes Board</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0f172a;
+            background-image: radial-gradient(#334155 1px, transparent 1px);
+            background-size: 24px 24px;
+            color: #f8fafc;
+        }
+
+        .handwriting {
+            font-family: 'Kalam', 'Noto Sans TC', cursive;
+        }
+
+        /* Sticky note visual style */
+        .sticky-note {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+        }
+
+        .sticky-note:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.5), 0 10px 15px -5px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+        }
+
+        /* Tape effect on top of note */
+        .sticky-note::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 22px;
+            background-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+            z-index: 5;
+        }
+
+        /* Dog-ear fold effect */
+        .sticky-note::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 0 16px 16px;
+            border-color: transparent transparent rgba(0, 0, 0, 0.3) transparent;
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* Freeboard canvas styling */
+        .freeboard-area {
+            min-height: calc(100vh - 140px);
+            position: relative;
+        }
+
+        .draggable-note {
+            cursor: move;
+            position: absolute;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col selection:bg-amber-400 selection:text-amber-950">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900/85 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-3 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            
+            <!-- Logo & Title -->
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-400 text-amber-950 p-2.5 rounded-2xl shadow-sm text-xl font-bold flex items-center justify-center w-10 h-10">
+                    <i class="fa-solid me-0.5 fa-thumbtack transform -rotate-45"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-100 tracking-tight flex items-center gap-2">
+                        便利貼靈感看板
+                        <span id="note-count-badge" class="bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs px-2.5 py-0.5 rounded-full font-medium">0 張</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">深色夜景模式 · 隨時記錄閃光靈感，自動儲存本機</p>
+                </div>
+            </div>
+
+            <!-- Central Search & Filters -->
+            <div class="flex items-center gap-2 flex-grow max-w-md">
+                <div class="relative w-full">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="search-input" placeholder="搜尋內容、標題或標籤..." 
+                        class="w-full pl-9 pr-8 py-1.5 text-sm bg-slate-800/90 border border-slate-700 text-slate-100 placeholder-slate-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
+                    <button id="clear-search-btn" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                        <i class="fa-solid fa-circle-xmark text-xs"></i>
+                    </button>
+                </div>
+
+                <!-- Color Filter Dropdown -->
+                <select id="color-filter" class="text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-xl px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer">
+                    <option value="all">🎨 所有顏色</option>
+                    <option value="yellow">🟡 經典黃</option>
+                    <option value="green">🟢 蘋果綠</option>
+                    <option value="blue">🔵 天空藍</option>
+                    <option value="pink">🩷 蜜桃粉</option>
+                    <option value="purple">💜 薰衣草</option>
+                    <option value="orange">🟠 暖陽橘</option>
+                </select>
+            </div>
+
+            <!-- View Switcher & Action Buttons -->
+            <div class="flex items-center space-x-2">
+                <!-- Mode Toggle Group -->
+                <div class="bg-slate-800/80 p-1 rounded-xl border border-slate-700/80 flex text-xs font-medium">
+                    <button id="view-grid-btn" class="view-btn px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition text-slate-300 hover:text-white" title="網格檢視">
+                        <i class="fa-solid fa-grip"></i>
+                        <span class="hidden sm:inline">網格</span>
+                    </button>
+                    <button id="view-kanban-btn" class="view-btn px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition text-slate-400 hover:text-slate-200" title="看板檢視">
+                        <i class="fa-solid fa-columns"></i>
+                        <span class="hidden sm:inline">看板</span>
+                    </button>
+                    <button id="view-free-btn" class="view-btn px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition text-slate-400 hover:text-slate-200" title="自由拖曳桌面">
+                        <i class="fa-solid fa-hand"></i>
+                        <span class="hidden sm:inline">自由畫布</span>
+                    </button>
+                </div>
+
+                <!-- New Note Button -->
+                <button id="add-note-btn" class="bg-amber-400 hover:bg-amber-300 text-amber-950 font-semibold px-3.5 py-1.5 rounded-xl shadow-md hover:shadow-lg text-sm flex items-center gap-1.5 transition active:scale-95">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>新增便利貼</span>
+                </button>
+
+                <!-- More Options Menu -->
+                <div class="relative">
+                    <button id="more-menu-btn" class="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition">
+                        <i class="fa-solid fa-ellipsis-vertical text-base"></i>
+                    </button>
+                    <div id="more-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl py-2 z-50 text-xs text-slate-200">
+                        <button id="export-btn" class="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2 text-slate-200">
+                            <i class="fa-solid fa-download text-amber-400"></i> 匯出 JSON 備份
+                        </button>
+                        <button id="import-trigger-btn" class="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2 text-slate-200">
+                            <i class="fa-solid fa-upload text-sky-400"></i> 匯入 JSON 檔案
+                        </button>
+                        <input type="file" id="import-input" accept=".json" class="hidden">
+                        <hr class="my-1 border-slate-700">
+                        <button id="clear-all-btn" class="w-full text-left px-4 py-2 hover:bg-red-500/20 flex items-center gap-2 text-red-400">
+                            <i class="fa-solid fa-trash-can"></i> 清空所有便利貼
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Board Area -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 relative">
+        
+        <!-- View 1: Grid View Container -->
+        <div id="grid-view" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 transition-all">
+            <!-- Dynamic Sticky Notes generated here -->
+        </div>
+
+        <!-- View 2: Kanban View Container -->
+        <div id="kanban-view" class="hidden grid grid-cols-1 md:grid-cols-3 gap-6 transition-all min-h-[70vh]">
+            <!-- Column: TODO -->
+            <div class="kanban-col bg-slate-800/50 backdrop-blur border border-slate-700/60 rounded-2xl p-4 flex flex-col" data-status="todo">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-700/80">
+                    <div class="flex items-center gap-2 font-bold text-slate-200 text-sm">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                        <span>待辦事項</span>
+                        <span class="count-badge bg-slate-700 text-slate-300 text-xs px-2 py-0.5 rounded-full" id="count-todo">0</span>
+                    </div>
+                    <button class="add-in-col-btn text-slate-400 hover:text-slate-100 text-xs p-1" data-status="todo" title="新增到待辦">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="kanban-cards-container flex-grow space-y-4 min-h-[200px]" id="kanban-todo"></div>
+            </div>
+
+            <!-- Column: IN PROGRESS -->
+            <div class="kanban-col bg-sky-950/30 backdrop-blur border border-sky-800/40 rounded-2xl p-4 flex flex-col" data-status="doing">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-sky-800/60">
+                    <div class="flex items-center gap-2 font-bold text-sky-200 text-sm">
+                        <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                        <span>進行中</span>
+                        <span class="count-badge bg-sky-900/60 text-sky-300 text-xs px-2 py-0.5 rounded-full" id="count-doing">0</span>
+                    </div>
+                    <button class="add-in-col-btn text-sky-400 hover:text-sky-200 text-xs p-1" data-status="doing" title="新增到進行中">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="kanban-cards-container flex-grow space-y-4 min-h-[200px]" id="kanban-doing"></div>
+            </div>
+
+            <!-- Column: DONE -->
+            <div class="kanban-col bg-emerald-950/30 backdrop-blur border border-emerald-800/40 rounded-2xl p-4 flex flex-col" data-status="done">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-emerald-800/60">
+                    <div class="flex items-center gap-2 font-bold text-emerald-200 text-sm">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                        <span>已完成</span>
+                        <span class="count-badge bg-emerald-900/60 text-emerald-300 text-xs px-2 py-0.5 rounded-full" id="count-done">0</span>
+                    </div>
+                    <button class="add-in-col-btn text-emerald-400 hover:text-emerald-200 text-xs p-1" data-status="done" title="新增到已完成">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="kanban-cards-container flex-grow space-y-4 min-h-[200px]" id="kanban-done"></div>
+            </div>
+        </div>
+
+        <!-- View 3: Freeboard View Container -->
+        <div id="free-view" class="hidden freeboard-area border-2 border-dashed border-slate-700/80 rounded-3xl relative overflow-hidden bg-slate-900/40">
+            <div id="freeboard-canvas" class="w-full h-full min-h-[75vh] relative">
+                <!-- Free draggable notes are absolutely positioned here -->
+            </div>
+        </div>
+
+        <!-- Empty State View -->
+        <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center">
+            <div class="w-20 h-20 bg-slate-800 text-amber-400 rounded-full flex items-center justify-center text-3xl mb-4 shadow-inner border border-slate-700">
+                <i class="fa-solid fa-note-sticky"></i>
+            </div>
+            <h3 class="text-lg font-bold text-slate-200">還沒有任何便利貼</h3>
+            <p class="text-sm text-slate-400 max-w-sm mt-1 mb-6">點擊上方「新增便利貼」按鈕，立刻開始紀錄您的發想、任務與閃光靈感！</p>
+            <button id="empty-add-btn" class="bg-amber-400 hover:bg-amber-300 text-amber-950 font-semibold px-5 py-2.5 rounded-xl shadow transition">
+                <i class="fa-solid fa-plus me-1"></i> 新增第一張便利貼
+            </button>
+        </div>
+    </main>
+
+    <!-- Custom Modal: Delete Confirmation -->
+    <div id="delete-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-sm w-full p-6 shadow-2xl transform transition-all scale-100 text-slate-100">
+            <div class="text-center">
+                <div class="w-12 h-12 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center mx-auto text-xl mb-3 border border-red-500/30">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-100" id="delete-modal-title">確認刪除這張便利貼？</h3>
+                <p class="text-xs text-slate-400 mt-1" id="delete-modal-desc">刪除後將無法恢復，請確認是否繼續。</p>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button id="cancel-delete-btn" class="w-1/2 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-medium text-sm transition">
+                    取消
+                </button>
+                <button id="confirm-delete-btn" class="w-1/2 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium text-sm shadow transition">
+                    確認刪除
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Widget -->
+    <div id="toast" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2.5 bg-slate-800 border border-slate-700 text-slate-100 px-4 py-3 rounded-2xl shadow-2xl text-xs font-medium pointer-events-none">
+        <span id="toast-icon" class="text-amber-400 text-base"><i class="fa-solid fa-circle-check"></i></span>
+        <span id="toast-msg">已儲存成功！</span>
+    </div>
+
+    <script>
+        // Data State Management
+        const STORAGE_KEY = 'sticky_notes_data_v2';
+        let notes = [];
+        let activeView = 'grid'; // 'grid', 'kanban', 'free'
+        let searchQuery = '';
+        let selectedColorFilter = 'all';
+        let pendingDeleteId = null;
+
+        // Color Theme Definitions
+        const colorThemes = {
+            yellow: {
+                bg: 'bg-amber-950/70',
+                border: 'border-amber-500/40',
+                headerBg: 'bg-amber-900/40',
+                titleColor: 'text-amber-200',
+                accent: 'bg-amber-400',
+                badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+            },
+            green: {
+                bg: 'bg-emerald-950/70',
+                border: 'border-emerald-500/40',
+                headerBg: 'bg-emerald-900/40',
+                titleColor: 'text-emerald-200',
+                accent: 'bg-emerald-400',
+                badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+            },
+            blue: {
+                bg: 'bg-sky-950/70',
+                border: 'border-sky-500/40',
+                headerBg: 'bg-sky-900/40',
+                titleColor: 'text-sky-200',
+                accent: 'bg-sky-400',
+                badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+            },
+            pink: {
+                bg: 'bg-rose-950/70',
+                border: 'border-rose-500/40',
+                headerBg: 'bg-rose-900/40',
+                titleColor: 'text-rose-200',
+                accent: 'bg-rose-400',
+                badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+            },
+            purple: {
+                bg: 'bg-purple-950/70',
+                border: 'border-purple-500/40',
+                headerBg: 'bg-purple-900/40',
+                titleColor: 'text-purple-200',
+                accent: 'bg-purple-400',
+                badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+            },
+            orange: {
+                bg: 'bg-orange-950/70',
+                border: 'border-orange-500/40',
+                headerBg: 'bg-orange-900/40',
+                titleColor: 'text-orange-200',
+                accent: 'bg-orange-400',
+                badgeBg: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+            }
+        };
+
+        // Load initial notes from LocalStorage
+        function loadNotes() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    notes = JSON.parse(saved);
+                } else {
+                    // Default starter sample notes
+                    notes = [
+                        {
+                            id: 'note-1',
+                            title: '歡迎使用靈感便利貼！',
+                            content: '這是一張靈感便利貼。您可以雙擊文字進行修改，切換顏色，或者切換至看板與自由畫布模式！',
+                            color: 'yellow',
+                            status: 'todo',
+                            pinned: true,
+                            tags: ['歡迎', '靈感'],
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            posX: 30,
+                            posY: 30
+                        },
+                        {
+                            id: 'note-2',
+                            title: '任務卡片範例',
+                            content: '點擊顏色小點即可切換這張便利貼的主題配色。切換至看板檢視還能自由拖曳進行狀態切換。',
+                            color: 'blue',
+                            status: 'doing',
+                            pinned: false,
+                            tags: ['任務', '工作'],
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            posX: 320,
+                            posY: 40
+                        }
+                    ];
+                    saveNotesToStorage();
+                }
+            } catch (err) {
+                console.error("Failed to load notes", err);
+                notes = [];
+            }
+        }
+
+        // Save notes to LocalStorage
+        function saveNotesToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+            } catch (err) {
+                console.error("Failed to save notes", err);
+            }
+        }
+
+        // Display Floating Toast
+        function showToast(message, iconClass = 'fa-circle-check') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.textContent = message;
+            toastIcon.innerHTML = `<i class="fa-solid ${iconClass}"></i>`;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        // Add new note
+        function addNewNote(status = 'todo') {
+            const colors = ['yellow', 'green', 'blue', 'pink', 'purple', 'orange'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            const newNote = {
+                id: 'note-' + Date.now(),
+                title: '無標題靈感',
+                content: '',
+                color: randomColor,
+                status: status,
+                pinned: false,
+                tags: ['新靈感'],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                posX: Math.floor(Math.random() * 200) + 40,
+                posY: Math.floor(Math.random() * 200) + 40
+            };
+
+            notes.unshift(newNote);
+            saveNotesToStorage();
+            render();
+            showToast('已新增便利貼！');
+        }
+
+        // Update single note property
+        function updateNote(id, updatedFields) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                Object.assign(note, updatedFields, { updatedAt: new Date().toISOString() });
+                saveNotesToStorage();
+                // If position changed only, no full re-render needed to avoid smooth drag flicker
+                if (!('posX' in updatedFields || 'posY' in updatedFields)) {
+                    render();
+                }
+            }
+        }
+
+        // Toggle pin note
+        function togglePin(id) {
+            const note = notes.find(n => n.id === id);
+            if (note) {
+                note.pinned = !note.pinned;
+                saveNotesToStorage();
+                render();
+                showToast(note.pinned ? '已釘選便利貼' : '已取消釘選');
+            }
+        }
+
+        // Open Delete Modal
+        function promptDeleteNote(id) {
+            pendingDeleteId = id;
+            document.getElementById('delete-modal-title').textContent = '確認刪除這張便利貼？';
+            document.getElementById('delete-modal-desc').textContent = '刪除後將無法恢復，請確認是否繼續。';
+            document.getElementById('delete-modal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.add('hidden');
+            pendingDeleteId = null;
+        }
+
+        // Confirm Delete Note
+        document.getElementById('confirm-delete-btn').addEventListener('click', () => {
+            if (pendingDeleteId === 'ALL') {
+                notes = [];
+                saveNotesToStorage();
+                render();
+                showToast('已清空所有便利貼');
+            } else if (pendingDeleteId) {
+                notes = notes.filter(n => n.id !== pendingDeleteId);
+                saveNotesToStorage();
+                render();
+                showToast('已刪除便利貼');
+            }
+            closeDeleteModal();
+        });
+
+        document.getElementById('cancel-delete-btn').addEventListener('click', closeDeleteModal);
+
+        // Helper: Escape HTML
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Helper: Format Date
+        function formatDate(isoStr) {
+            if (!isoStr) return '';
+            const d = new Date(isoStr);
+            return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function createNoteCardHTML(note, isFreeView = false) {
+            const theme = colorThemes[note.color] || colorThemes.yellow;
+            const pinnedClass = note.pinned ? 'ring-2 ring-amber-400' : '';
+            
+            return `
+                <div class="sticky-note ${theme.bg} ${theme.border} border rounded-2xl p-4 flex flex-col justify-between ${pinnedClass} transition-all duration-200 group h-full min-h-[220px]" data-id="${note.id}">
+                    <div>
+                        <!-- Note Header -->
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                            <input type="text" value="${escapeHtml(note.title)}" 
+                                class="note-title bg-transparent font-bold ${theme.titleColor} text-base w-full focus:bg-slate-900/60 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-slate-500 transition"
+                                placeholder="輸入標題..." data-id="${note.id}">
+                            
+                            <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
+                                <button onclick="togglePin('${note.id}')" class="p-1 text-xs hover:scale-110 transition ${note.pinned ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'}" title="${note.pinned ? '取消釘選' : '釘選至頂'}">
+                                    <i class="fa-solid fa-thumbtack ${note.pinned ? '' : 'transform -rotate-45'}"></i>
+                                </button>
+                                <button onclick="promptDeleteNote('${note.id}')" class="p-1 text-xs text-slate-400 hover:text-red-400 hover:scale-110 transition" title="刪除便利貼">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Note Content Area -->
+                        <textarea data-id="${note.id}"
+                            class="note-content w-full bg-transparent text-slate-200 text-xs leading-relaxed resize-none h-24 focus:bg-slate-900/60 rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-slate-500 transition placeholder-slate-500"
+                            placeholder="在這裡寫下您的發想或備忘事項...">${escapeHtml(note.content)}</textarea>
+                    </div>
+
+                    <!-- Note Footer & Palette -->
+                    <div class="mt-3 pt-2 border-t border-slate-700/50 flex flex-col gap-2">
+                        <!-- Tags & Status -->
+                        <div class="flex items-center justify-between text-[11px]">
+                            <div class="flex items-center gap-1 flex-wrap">
+                                ${(note.tags || []).map(tag => `<span class="px-2 py-0.5 rounded-md text-[10px] ${theme.badgeBg}">#${escapeHtml(tag)}</span>`).join('')}
+                            </div>
+                            <span class="text-[10px] text-slate-400">${formatDate(note.updatedAt)}</span>
+                        </div>
+
+                        <!-- Color Picker Selector -->
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-1.5">
+                                ${Object.keys(colorThemes).map(cKey => `
+                                    <button onclick="updateNote('${note.id}', {color: '${cKey}'})" 
+                                        class="w-3.5 h-3.5 rounded-full ${colorThemes[cKey].accent} ${note.color === cKey ? 'ring-2 ring-white scale-110' : 'opacity-60 hover:opacity-100'} transition"
+                                        title="${cKey}"></button>
+                                `).join('')}
+                            </div>
+
+                            <!-- Kanban Status Switcher -->
+                            <select onchange="updateNote('${note.id}', {status: this.value})" class="text-[10px] bg-slate-900/80 text-slate-300 border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none">
+                                <option value="todo" ${note.status === 'todo' ? 'selected' : ''}>📌 待辦</option>
+                                <option value="doing" ${note.status === 'doing' ? 'selected' : ''}>🚀 進行中</option>
+                                <option value="done" ${note.status === 'done' ? 'selected' : ''}>✅ 已完成</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Filter notes by search query and selected color
+        function getFilteredNotes() {
+            return notes.filter(note => {
+                const matchesColor = selectedColorFilter === 'all' || note.color === selectedColorFilter;
+                const matchesQuery = searchQuery === '' || 
+                    note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (note.tags && note.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
+                return matchesColor && matchesQuery;
+            }).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+        }
+
+        // Main Render Function
+        function render() {
+            const filtered = getFilteredNotes();
+            const noteCountBadge = document.getElementById('note-count-badge');
+            const emptyState = document.getElementById('empty-state');
+            
+            const gridView = document.getElementById('grid-view');
+            const kanbanView = document.getElementById('kanban-view');
+            const freeView = document.getElementById('free-view');
+
+            noteCountBadge.textContent = `${notes.length} 張`;
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                gridView.classList.add('hidden');
+                kanbanView.classList.add('hidden');
+                freeView.classList.add('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            // Render according to active view
+            if (activeView === 'grid') {
+                gridView.classList.remove('hidden');
+                kanbanView.classList.add('hidden');
+                freeView.classList.add('hidden');
+
+                gridView.innerHTML = filtered.map(note => createNoteCardHTML(note)).join('');
+            } else if (activeView === 'kanban') {
+                gridView.classList.add('hidden');
+                kanbanView.classList.remove('hidden');
+                freeView.classList.add('hidden');
+
+                const todoNotes = filtered.filter(n => n.status === 'todo');
+                const doingNotes = filtered.filter(n => n.status === 'doing');
+                const doneNotes = filtered.filter(n => n.status === 'done');
+
+                document.getElementById('count-todo').textContent = todoNotes.length;
+                document.getElementById('count-doing').textContent = doingNotes.length;
+                document.getElementById('count-done').textContent = doneNotes.length;
+
+                document.getElementById('kanban-todo').innerHTML = todoNotes.map(n => createNoteCardHTML(n)).join('');
+                document.getElementById('kanban-doing').innerHTML = doingNotes.map(n => createNoteCardHTML(n)).join('');
+                document.getElementById('kanban-done').innerHTML = doneNotes.map(n => createNoteCardHTML(n)).join('');
+            } else if (activeView === 'free') {
+                gridView.classList.add('hidden');
+                kanbanView.classList.add('hidden');
+                freeView.classList.remove('hidden');
+
+                const canvas = document.getElementById('freeboard-canvas');
+                canvas.innerHTML = filtered.map(note => `
+                    <div class="draggable-note w-72" style="left: ${note.posX || 20}px; top: ${note.posY || 20}px;" data-id="${note.id}">
+                        ${createNoteCardHTML(note, true)}
+                    </div>
+                `).join('');
+
+                initFreeboardDragging();
+            }
+
+            attachCardInputListeners();
+        }
+
+        // Attach event listeners to live text inputs inside cards
+        function attachCardInputListeners() {
+            document.querySelectorAll('.note-title').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const id = e.target.dataset.id;
+                    updateNote(id, { title: e.target.value });
+                });
+            });
+
+            document.querySelectorAll('.note-content').forEach(textarea => {
+                textarea.addEventListener('change', (e) => {
+                    const id = e.target.dataset.id;
+                    updateNote(id, { content: e.target.value });
+                });
+            });
+        }
+
+        // Draggable implementation for Freeboard canvas
+        function initFreeboardDragging() {
+            const draggables = document.querySelectorAll('.draggable-note');
+            let activeElement = null;
+            let startX, startY, initialLeft, initialTop;
+
+            draggables.forEach(el => {
+                const header = el.querySelector('.sticky-note');
+                
+                function onMouseDown(e) {
+                    // Prevent drag when clicking inputs/buttons
+                    if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(e.target.tagName)) return;
+
+                    activeElement = el;
+                    el.style.zIndex = 100;
+
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                    startX = clientX;
+                    startY = clientY;
+                    initialLeft = parseInt(el.style.left, 10) || 0;
+                    initialTop = parseInt(el.style.top, 10) || 0;
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                    document.addEventListener('touchmove', onMouseMove, { passive: false });
+                    document.addEventListener('touchend', onMouseUp);
+                }
+
+                function onMouseMove(e) {
+                    if (!activeElement) return;
+                    if (e.cancelable) e.preventDefault();
+
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                    const dx = clientX - startX;
+                    const dy = clientY - startY;
+
+                    activeElement.style.left = `${Math.max(0, initialLeft + dx)}px`;
+                    activeElement.style.top = `${Math.max(0, initialTop + dy)}px`;
+                }
+
+                function onMouseUp() {
+                    if (activeElement) {
+                        const id = activeElement.dataset.id;
+                        const posX = parseInt(activeElement.style.left, 10);
+                        const posY = parseInt(activeElement.style.top, 10);
+                        updateNote(id, { posX, posY });
+                        activeElement.style.zIndex = '';
+                        activeElement = null;
+                    }
+
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    document.removeEventListener('touchmove', onMouseMove);
+                    document.removeEventListener('touchend', onMouseUp);
+                }
+
+                header.addEventListener('mousedown', onMouseDown);
+                header.addEventListener('touchstart', onMouseDown, { passive: false });
+            });
+        }
+
+        // Header Controls
+        const viewBtns = {
+            grid: document.getElementById('view-grid-btn'),
+            kanban: document.getElementById('view-kanban-btn'),
+            free: document.getElementById('view-free-btn')
+        };
+
+        function setView(viewName) {
+            activeView = viewName;
+            Object.keys(viewBtns).forEach(key => {
+                const btn = viewBtns[key];
+                if (key === viewName) {
+                    btn.classList.add('bg-slate-700', 'text-amber-300', 'font-bold');
+                    btn.classList.remove('text-slate-400');
+                } else {
+                    btn.classList.remove('bg-slate-700', 'text-amber-300', 'font-bold');
+                    btn.classList.add('text-slate-400');
+                }
+            });
+            render();
+        }
+
+        document.getElementById('add-note-btn').addEventListener('click', () => addNewNote('todo'));
+        document.getElementById('empty-add-btn').addEventListener('click', () => addNewNote('todo'));
+
+        viewBtns.grid.addEventListener('click', () => setView('grid'));
+        viewBtns.kanban.addEventListener('click', () => setView('kanban'));
+        viewBtns.free.addEventListener('click', () => setView('free'));
+
+        document.querySelectorAll('.add-in-col-btn').forEach(btn => {
+            btn.addEventListener('click', () => addNewNote(btn.dataset.status));
+        });
+
+        // Search & Filter Listeners
+        const searchInput = document.getElementById('search-input');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            clearSearchBtn.classList.toggle('hidden', searchQuery === '');
+            render();
+        });
+
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            searchQuery = '';
+            clearSearchBtn.classList.add('hidden');
+            render();
+        });
+
+        document.getElementById('color-filter').addEventListener('change', (e) => {
+            selectedColorFilter = e.target.value;
+            render();
+        });
+
+        // Menu Dropdown
+        const moreMenuBtn = document.getElementById('more-menu-btn');
+        const moreMenuDropdown = document.getElementById('more-menu-dropdown');
+
+        moreMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            moreMenuDropdown.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', () => {
+            moreMenuDropdown.classList.add('hidden');
+        });
+
+        // Export JSON Backup
+        document.getElementById('export-btn').addEventListener('click', () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `便利貼看板備份_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('已匯出資料備份檔！');
+        });
+
+        // Import JSON Backup
+        const importTriggerBtn = document.getElementById('import-trigger-btn');
+        const importInput = document.getElementById('import-input');
+
+        importTriggerBtn.addEventListener('click', () => importInput.click());
+
+        importInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const imported = JSON.parse(event.target.result);
+                    if (Array.isArray(imported)) {
+                        notes = imported;
+                        saveNotesToStorage();
+                        render();
+                        showToast('成功匯入備份資料！');
+                    } else {
+                        showToast('匯入失敗：格式不正確', 'fa-triangle-exclamation');
+                    }
+                } catch (err) {
+                    showToast('解析 JSON 檔案失敗', 'fa-triangle-exclamation');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Clear All Notes
+        document.getElementById('clear-all-btn').addEventListener('click', () => {
+            if (notes.length === 0) return;
+            pendingDeleteId = 'ALL';
+            document.getElementById('delete-modal-title').textContent = '確認清空所有便利貼？';
+            document.getElementById('delete-modal-desc').textContent = '這將會刪除您看板上的所有便利貼且不可還原。';
+            document.getElementById('delete-modal').classList.remove('hidden');
+        });
+
+        // App Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            loadNotes();
+            setView('grid');
+        });
+    </script>
+</body>
+</html>
